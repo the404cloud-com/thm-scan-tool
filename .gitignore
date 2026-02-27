@@ -1,0 +1,33 @@
+# Scan output folders (created when running the tool)
+*_*/
+!thm-scan-tool/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Nmap output files (don't commit scan results)
+*.nmap
+*.xml
+*.gnmap
