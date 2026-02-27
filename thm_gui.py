@@ -36,6 +36,35 @@ FONT_LABEL  = ("Segoe UI", 10)
 FONT_TITLE  = ("Segoe UI", 14, "bold")
 FONT_SMALL  = ("Segoe UI", 9)
 
+# ── Well-known port → service name lookup ─────────────────────────────────────
+KNOWN_PORTS = {
+    "20": "ftp-data",    "21": "ftp",          "22": "ssh",
+    "23": "telnet",      "25": "smtp",          "53": "dns",
+    "67": "dhcp",        "68": "dhcp",          "69": "tftp",
+    "80": "http",        "88": "kerberos",      "110": "pop3",
+    "111": "rpcbind",    "119": "nntp",         "123": "ntp",
+    "135": "msrpc",      "137": "netbios-ns",   "138": "netbios-dgm",
+    "139": "netbios-ssn","143": "imap",         "161": "snmp",
+    "389": "ldap",       "443": "https",        "445": "smb",
+    "465": "smtps",      "500": "ike",          "514": "syslog",
+    "587": "smtp-sub",   "636": "ldaps",        "873": "rsync",
+    "902": "vmware",     "993": "imaps",        "995": "pop3s",
+    "1080": "socks",     "1194": "openvpn",     "1433": "mssql",
+    "1521": "oracle",    "1723": "pptp",        "2049": "nfs",
+    "2222": "ssh-alt",   "2375": "docker",      "2376": "docker-tls",
+    "3000": "dev-server","3306": "mysql",       "3389": "rdp",
+    "3690": "svn",       "4000": "http-alt",    "4443": "https-alt",
+    "4444": "shell",     "4505": "salt",        "5000": "flask",
+    "5432": "postgresql","5555": "adb",         "5601": "kibana",
+    "5800": "vnc-http",  "5900": "vnc",         "5985": "winrm-http",
+    "5986": "winrm-https","6379": "redis",      "6443": "k8s-api",
+    "7001": "weblogic",  "8000": "http-alt",    "8080": "http-proxy",
+    "8081": "http-alt",  "8443": "https-alt",   "8888": "http-alt",
+    "9000": "php-fpm",   "9090": "http-alt",    "9200": "elasticsearch",
+    "9300": "elasticsearch","10000": "webmin",  "11211": "memcached",
+    "27017": "mongodb",  "27018": "mongodb",    "50000": "db2",
+}
+
 
 class THMScannerApp(tk.Tk):
     def __init__(self):
@@ -54,6 +83,7 @@ class THMScannerApp(tk.Tk):
         self._scan_thread  = None
         self._scanning     = False
         self._port_count   = 0
+        self._port_rows    = {}   # port_str -> treeview iid, for live updates
 
         self._build_ui()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -385,6 +415,7 @@ class THMScannerApp(tk.Tk):
         # Reset progress widgets
         self._progress_var.set(0)
         self._eta_var.set("")
+        self._port_rows = {}
         self._notebook.tab(1, text="  Open Ports  ")
 
         # Clear previous results
@@ -473,7 +504,12 @@ class THMScannerApp(tk.Tk):
         # ── Colour rules ──────────────────────────────────────────────────────
         if "open" in stripped and ("/tcp" in stripped or "/udp" in stripped):
             self._log(f"  {stripped}\n", "green")
-            self._add_port_to_table(stripped)
+            if stripped.startswith("Discovered open port"):
+                # Verbose discovery line: "Discovered open port 445/tcp on 127.0.0.1"
+                self._add_discovered_port(stripped)
+            else:
+                # Service scan result: "80/tcp   open  http   Apache 2.4.41"
+                self._add_service_port(stripped)
         elif stripped.startswith("Nmap scan report"):
             self._log(f"{stripped}\n", "cyan")
         elif stripped.startswith("PORT") or "STATE" in stripped:
@@ -485,17 +521,38 @@ class THMScannerApp(tk.Tk):
         else:
             self._log(f"  {stripped}\n")
 
-    def _add_port_to_table(self, line: str):
-        parts = line.split(None, 3)
+    def _add_discovered_port(self, line: str):
+        """Handle verbose discovery line: 'Discovered open port 445/tcp on 127.0.0.1'"""
+        parts    = line.split()
+        port_str = parts[3] if len(parts) > 3 else ""   # e.g. "445/tcp"
+        port_num = port_str.split("/")[0]
+        service  = KNOWN_PORTS.get(port_num, "")
+
+        if port_str in self._port_rows:
+            return  # already have this port, skip duplicate
+        iid = self._tree.insert("", "end", values=(port_str, "open", service, "scanning…"))
+        self._port_rows[port_str] = iid
+        self._port_count += 1
+        self._notebook.tab(1, text=f"  Open Ports ({self._port_count})  ")
+
+    def _add_service_port(self, line: str):
+        """Handle service scan result: '80/tcp   open  http   Apache httpd 2.4.41'"""
+        parts   = line.split(None, 3)
         port    = parts[0] if len(parts) > 0 else ""
         state   = parts[1] if len(parts) > 1 else ""
         service = parts[2] if len(parts) > 2 else ""
         version = parts[3] if len(parts) > 3 else ""
-        self._tree.insert("", "end", values=(port, state, service, version))
 
-        # Update live count on tab label
-        self._port_count += 1
-        self._notebook.tab(1, text=f"  Open Ports ({self._port_count})  ")
+        if port in self._port_rows:
+            # Update the existing row with full service/version info
+            iid = self._port_rows[port]
+            self._tree.item(iid, values=(port, state, service, version))
+        else:
+            # Port wasn't in discovery phase — add it fresh
+            iid = self._tree.insert("", "end", values=(port, state, service, version))
+            self._port_rows[port] = iid
+            self._port_count += 1
+            self._notebook.tab(1, text=f"  Open Ports ({self._port_count})  ")
 
     def _scan_done(self):
         self._scanning = False
