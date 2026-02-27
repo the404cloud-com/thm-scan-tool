@@ -53,6 +53,7 @@ class THMScannerApp(tk.Tk):
         self._scan_process = None
         self._scan_thread  = None
         self._scanning     = False
+        self._port_count   = 0
 
         self._build_ui()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -190,6 +191,28 @@ class THMScannerApp(tk.Tk):
             btn_frame, textvariable=self._status_var,
             font=FONT_SMALL, fg=DIM, bg=BG
         ).pack(side="right", padx=10)
+
+        # ── Progress bar + ETA ────────────────────────────────────────────────
+        prog_frame = tk.Frame(self, bg=BG, padx=12, pady=(0, 4))
+        prog_frame.pack(fill="x")
+
+        style = ttk.Style()
+        style.configure("scan.Horizontal.TProgressbar",
+            troughcolor=BG2, background=GREEN, bordercolor=BG, lightcolor=GREEN, darkcolor=GREEN)
+
+        self._progress_var = tk.DoubleVar(value=0)
+        self._progressbar  = ttk.Progressbar(
+            prog_frame, variable=self._progress_var,
+            maximum=100, mode="determinate", length=200,
+            style="scan.Horizontal.TProgressbar"
+        )
+        self._progressbar.pack(side="left", fill="x", expand=True, padx=(0, 12))
+
+        self._eta_var = tk.StringVar(value="")
+        tk.Label(
+            prog_frame, textvariable=self._eta_var,
+            font=FONT_SMALL, fg=YELLOW, bg=BG, width=28, anchor="w"
+        ).pack(side="left")
 
         # ── Output area ───────────────────────────────────────────────────────
         out_frame = tk.Frame(self, bg=BG, padx=12, pady=4)
@@ -352,11 +375,17 @@ class THMScannerApp(tk.Tk):
             messagebox.showwarning("Missing input", "Please enter a Box Name.")
             return
 
-        self._scanning = True
+        self._scanning    = True
+        self._port_count  = 0
         self._start_btn.config(state="disabled")
         self._stop_btn.config(state="normal")
         self._status_var.set("Scanning…")
         self._start_time = datetime.now()
+
+        # Reset progress widgets
+        self._progress_var.set(0)
+        self._eta_var.set("")
+        self._notebook.tab(1, text="  Open Ports  ")
 
         # Clear previous results
         self._clear_output(keep_header=True)
@@ -369,7 +398,7 @@ class THMScannerApp(tk.Tk):
         skip_v = self._skip_vuln_var.get()
         skip_o = self._skip_os_var.get()
 
-        flags = ["-sV", "-sC", "--open", f"-T{timing}"]
+        flags = ["-sV", "-sC", "--open", f"-T{timing}", "-v", "--stats-every", "5s"]
         if mode == "full":
             flags.append("-p-")
         if not skip_o:
@@ -421,12 +450,27 @@ class THMScannerApp(tk.Tk):
             self.after(0, self._scan_done)
 
     def _process_line(self, line: str):
+        import re
         stripped = line.rstrip()
         if not stripped:
             self._log("\n")
             return
 
-        # Colour rules
+        # ── ETA / progress lines (suppress from main output, show in bar) ────
+        # e.g. "SYN Stealth Scan Timing: About 15.00% done; ETC: 20:52 (0:03:10 remaining)"
+        eta_match = re.search(r"About\s+([\d.]+)%\s+done.*?(\d+:\d+:\d+)\s+remaining", stripped)
+        if eta_match:
+            pct       = float(eta_match.group(1))
+            remaining = eta_match.group(2)
+            self._progress_var.set(pct)
+            self._eta_var.set(f"⏱ {pct:.1f}%  —  ETA: {remaining} remaining")
+            return  # don't clutter the output log with raw stats lines
+
+        # Also catch the "Stats:" summary line silently
+        if stripped.startswith("Stats:") and "undergoing" in stripped:
+            return
+
+        # ── Colour rules ──────────────────────────────────────────────────────
         if "open" in stripped and ("/tcp" in stripped or "/udp" in stripped):
             self._log(f"  {stripped}\n", "green")
             self._add_port_to_table(stripped)
@@ -448,9 +492,10 @@ class THMScannerApp(tk.Tk):
         service = parts[2] if len(parts) > 2 else ""
         version = parts[3] if len(parts) > 3 else ""
         self._tree.insert("", "end", values=(port, state, service, version))
-        # Switch to ports tab automatically on first hit
-        if len(self._tree.get_children()) == 1:
-            self._notebook.select(1)
+
+        # Update live count on tab label
+        self._port_count += 1
+        self._notebook.tab(1, text=f"  Open Ports ({self._port_count})  ")
 
     def _scan_done(self):
         self._scanning = False
@@ -461,6 +506,8 @@ class THMScannerApp(tk.Tk):
         elapsed_str = str(elapsed).split(".")[0]
 
         port_count = len(self._tree.get_children())
+        self._progress_var.set(100)
+        self._eta_var.set(f"✓ Complete in {elapsed_str}")
         self._status_var.set(f"Done — {port_count} open port(s) found")
         self._elapsed_var.set(f"Elapsed: {elapsed_str}")
 
