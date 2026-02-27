@@ -193,8 +193,8 @@ class THMScannerApp(tk.Tk):
         ).pack(side="right", padx=10)
 
         # ── Progress bar + ETA ────────────────────────────────────────────────
-        prog_frame = tk.Frame(self, bg=BG, padx=12, pady=(0, 4))
-        prog_frame.pack(fill="x")
+        prog_frame = tk.Frame(self, bg=BG, padx=12)
+        prog_frame.pack(fill="x", pady=(0, 4))
 
         style = ttk.Style()
         style.configure("scan.Horizontal.TProgressbar",
