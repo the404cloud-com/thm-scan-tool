@@ -10,6 +10,7 @@
 
 ## Features
 
+- 🖥️ **Desktop GUI** (`thm_gui.py`) — dark-themed Tkinter window, no browser needed, built into Python
 - ⚡ **Two-phase scanning** — quick top-1000 port scan first so you see open ports *immediately*, then a deep full-port scan in the background
 - 📁 **Auto-creates output folder** named `BoxName_IP/` so results are always organised
 - 💾 **Saves all nmap formats** — `.nmap` (readable), `.xml` (for tools), `.gnmap` (grep-friendly)
@@ -62,7 +63,19 @@ pip install -r requirements.txt
 
 ---
 
-## Usage
+## GUI (Recommended)
+
+Launch the dark-themed desktop app — no command line needed:
+
+```bash
+python thm_gui.py
+```
+
+Fill in the Target IP and Box Name, pick your scan mode, and hit **Start Scan**. Open ports appear live in the Output tab and are automatically collected in the **Open Ports** tab as a clean table.
+
+---
+
+## CLI Usage
 
 ```bash
 # Basic scan — quick scan first, then full deep scan
