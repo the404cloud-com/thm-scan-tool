@@ -276,22 +276,9 @@ class THMScannerApp(tk.Tk):
         )
         entry.pack(fill="x", ipady=5)
 
-        # Placeholder
-        def _on_focus_in(e, ph=placeholder, v=var):
-            if v.get() == ph:
-                v.set("")
-                entry.config(fg=WHITE)
-        def _on_focus_out(e, ph=placeholder, v=var):
-            if not v.get():
-                v.set(ph)
-                entry.config(fg=DIM)
-
+        # Placeholder behaviour
         var.set(placeholder)
         entry.config(fg=DIM)
-        entry.bind("<FocusIn>",  _on_focus_out.__class__(_on_focus_in))
-        entry.bind("<FocusOut>", _on_focus_out.__class__(_on_focus_out))
-
-        # Simpler approach — just bind directly
         entry.bind("<FocusIn>",  lambda e: (var.set(""), entry.config(fg=WHITE))
                                             if var.get() == placeholder else None)
         entry.bind("<FocusOut>", lambda e: (var.set(placeholder), entry.config(fg=DIM))
